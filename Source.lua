@@ -59,20 +59,13 @@ function module:Create(Class, Properties)
     return Object
 end
 
-function module:ParseColor(Color, Instance)
-    local TeamColor = self:GetTeamColor(Instance) or Color
+function module:ParseColor(Color, Player)
+    local TeamColor = self:GetTeamColor(Player) or Color
     return self.settings.teamcolor and TeamColor or Color
 end
 
-function module:AddEsp(Instance)
-    -- Verifica se a instância é um NPC (por exemplo, se não é um jogador)
-    if Instance:IsA("Player") then
-        return
-    end
-
-    -- Verifica se a instância tem uma tag específica ou nome que identifica um NPC
-    -- Exemplo: se o NPC tem um nome que começa com "NPC_"
-    if not Instance.Name:find("NPC_") then
+function module:AddEsp(Player)
+    if (Player == LocalPlayer) then
         return
     end
 
@@ -80,7 +73,7 @@ function module:AddEsp(Instance)
 
     Retainer.nameobject = self:Create("Text", {
         Visible = false,
-        Text = Instance.Name,
+        Text = Player.Name,
         Color = Color3.new(1, 1, 1),
         Size = 13,
         Center = true,
@@ -145,22 +138,26 @@ function module:AddEsp(Instance)
 
     local CanRun = true
 
-    RunService:BindToRenderStep(Instance.Name .. "Esp", 1, function()
+    RunService:BindToRenderStep(Player.Name .. "Esp", 1, function()
         if (not CanRun) then
             return
         end
 
         CanRun = false
 
-        local Character, Root = self:GetCharacter(Instance)
+        local Character, Root = self:GetCharacter(Player)
 
         if (Character and Root) then
-            local Health, MaxHealth = self:GetHealth(Instance)
+            local Health, MaxHealth = self:GetHealth(Player)
             local _, OnScreen = CurrentCamera:WorldToViewportPoint(Root.Position)
             local Magnitude = (Root.Position - CurrentCamera.CFrame.p).Magnitude
             local CanShow = OnScreen and self.settings.enabled
 
             if (self.settings.limitdistance and Magnitude > self.settings.maxdistance) then
+                CanShow = false
+            end
+
+            if (self.settings.teamcheck and not self:CheckTeam(Player)) then
                 CanShow = false
             end
 
@@ -181,7 +178,7 @@ function module:AddEsp(Instance)
                 Retainer.nameobject.Outline = self.settings.outlines
                 Retainer.nameobject.Size = self.settings.textsize
                 Retainer.nameobject.Font = self.settings.textfont
-                Retainer.nameobject.Color = self:ParseColor(self.settings.namescolor, Instance)
+                Retainer.nameobject.Color = self:ParseColor(self.settings.namescolor, Player)
                 Retainer.nameobject.Position = Vector2.new(Data.Positions.Middle.X, (Data.Positions.TopLeft.Y - 15) + self.settings.textoffset)
 
                 Retainer.distanceobject.Visible = self.settings.distance
@@ -189,13 +186,13 @@ function module:AddEsp(Instance)
                 Retainer.distanceobject.Text = math.floor(Magnitude) .. " Studs"
                 Retainer.distanceobject.Size = self.settings.textsize
                 Retainer.distanceobject.Font = self.settings.textfont
-                Retainer.distanceobject.Color = self:ParseColor(self.settings.distancecolor, Instance)
+                Retainer.distanceobject.Color = self:ParseColor(self.settings.distancecolor, Player)
                 Retainer.distanceobject.Position = Vector2.new(Data.Positions.Middle.X, (Data.Positions.BottomLeft.Y + 3) + self.settings.textoffset)
 
                 Retainer.boxobject.Visible = self.settings.boxes
-                Retainer.boxobject.Color = self:ParseColor(self.settings.boxescolor, Instance)
+                Retainer.boxobject.Color = self:ParseColor(self.settings.boxescolor, Player)
                 Retainer.boxoutlineobject.Visible = self.settings.boxes and self.settings.outlines
-                Retainer.boxfillobject.Color = self:ParseColor(self.settings.boxesfillcolor, Instance)
+                Retainer.boxfillobject.Color = self:ParseColor(self.settings.boxesfillcolor, Player)
                 Retainer.boxfillobject.Transparency = self.settings.boxesfilltrans
                 Retainer.boxfillobject.Visible = self.settings.boxes and self.settings.boxesfill
 
@@ -209,7 +206,7 @@ function module:AddEsp(Instance)
                 Retainer.boxfillobject.Position = BoxPosition
 
                 Retainer.healthbarobject.Visible = self.settings.healthbars
-                Retainer.healthbarobject.Color = self:ParseColor(self.settings.healthbarscolor, Instance)
+                Retainer.healthbarobject.Color = self:ParseColor(self.settings.healthbarscolor, Player)
                 Retainer.healthbaroutlineobject.Visible = self.settings.healthbars and self.settings.outlines
 
                 Retainer.healthbarobject.Size = HealthbarSize
@@ -219,7 +216,7 @@ function module:AddEsp(Instance)
                 Retainer.healthbaroutlineobject.Position = HealthbarPosition
 
                 Retainer.tracerobject.Visible = self.settings.tracers
-                Retainer.tracerobject.Color = self:ParseColor(self.settings.tracerscolor, Instance)
+                Retainer.tracerobject.Color = self:ParseColor(self.settings.tracerscolor, Player)
                 Retainer.tracerobject.To = Data.Positions.Middle
 
                 local Origin, Target = self.settings.tracersorigin, Vector2.new(ViewportSize.X / 2, ViewportSize.Y / 2)
@@ -231,7 +228,7 @@ function module:AddEsp(Instance)
                 elseif (Origin == "Left") then
                     Target = Vector2.new(0, Target.Y)
                 elseif (Origin == "Right") then
-                    Target = Vector2.new(ViewportSize.X, Target.Y)
+                    Target = Vector2.new(ViewportSize.X, Taget.Y)
                 elseif (Origin == "Mouse") then
                     Target = Vector2.new(Mouse.X, Mouse.Y + 36)
                 end
@@ -253,14 +250,14 @@ function module:AddEsp(Instance)
         CanRun = true
     end)
 
-    self.cache[Instance] = Retainer
+    self.cache[Player] = Retainer
 end
 
-function module:RemoveEsp(Instance)
-    local Data = self.cache[Instance]
+function module:RemoveEsp(Player)
+    local Data = self.cache[Player]
 
     if (Data) then
-        RunService:UnbindFromRenderStep(Instance.Name .. "Esp")
+        RunService:UnbindFromRenderStep(Player.Name .. "Esp")
 
         for _, Object in pairs(Data) do
             Object:Remove()
@@ -268,8 +265,8 @@ function module:RemoveEsp(Instance)
     end
 end
 
-function module:GetCharacter(Instance)
-    return Instance.Character, Instance.Character and Instance.Character:WaitForChild("HumanoidRootPart")
+function module:GetCharacter(Player)
+    return Player.Character, Player.Character and Player.Character:WaitForChild("HumanoidRootPart")
 end
 
 function module:GetBoundingBox(Character)
@@ -286,40 +283,61 @@ function module:GetBoundingBox(Character)
     return Math.getposlist2(Data)
 end
 
-function module:GetHealth(Instance)
-    local Character = self:GetCharacter(Instance)
+function module:GetHealth(Player)
+    local Character = self:GetCharacter(Player)
     local Humanoid = Character and Character:WaitForChild("Humanoid")
 
     return Humanoid and Humanoid.Health, Humanoid and Humanoid.MaxHealth
 end
 
-function module:GetTeam(Instance)
-    return Instance.Team
+function module:GetTeam(Player)
+    return Player.Team
 end
 
-function module:GetTeamColor(Instance)
-    local Team = self:GetTeam(Instance)
+function module:GetTeamColor(Player)
+    local Team = self:GetTeam(Player)
     return Team and Team.TeamColor.Color
 end
 
-function module:CheckTeam(Instance)
-    return Instance.Team ~= LocalPlayer.Team
+function module:CheckTeam(Player)
+    return Player.Team ~= LocalPlayer.Team
 end
 
 function module:Init()
-    -- Itera sobre todos os NPCs no workspace
-    for _, npc in ipairs(workspace:GetChildren()) do
-        if npc.Name:find("NPC_") then  -- Verifica se é um NPC
+    -- Adiciona ESP para jogadores
+    for _, player in pairs(Players:GetPlayers()) do
+        self:AddEsp(player)
+    end
+
+    -- Detecta novos jogadores entrando
+    Players.PlayerAdded:Connect(function(player)
+        self:AddEsp(player)
+    end)
+
+    Players.PlayerRemoving:Connect(function(player)
+        self:RemoveEsp(player)
+    end)
+
+    -- **ADICIONA SUPORTE PARA NPCs**
+    for _, npc in pairs(workspace:GetChildren()) do
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
             self:AddEsp(npc)
         end
     end
 
-    -- Conecta um evento para adicionar ESP a novos NPCs que são adicionados ao workspace
-    workspace.ChildAdded:Connect(function(child)
-        if child.Name:find("NPC_") then  -- Verifica se é um NPC
-            self:AddEsp(child)
+    -- Detecta novos NPCs adicionados ao workspace
+    workspace.ChildAdded:Connect(function(npc)
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+            self:AddEsp(npc)
+        end
+    end)
+
+    workspace.ChildRemoved:Connect(function(npc)
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+            self:RemoveEsp(npc)
         end
     end)
 end
+
 
 return module
