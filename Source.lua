@@ -1,187 +1,316 @@
---[[  
-    ESP para NPCs - Corrigido Registro e Atualização Dinâmica  
+--[[ 
+    https://github.com/VoidMasterX | siper#9938. 
+    Adaptado para NPCs.
 ]]--
 
-local ESP = {
-    Enabled = true,
-    BoxEnabled = true,
-    BoxColor = Color3.fromRGB(255, 255, 255),
-    BoxThickness = 2, -- Espessura da borda da caixa
-    OutlineEnabled = true, -- Ativar contorno preto nas caixas e textos
-    OutlineColor = Color3.fromRGB(0, 0, 0),
-    HealthBarEnabled = true,
-    HealthBarColor = Color3.fromRGB(0, 255, 0),
-    NameEnabled = true,
-    DistanceEnabled = true,
-    MaxDistance = 2500,
-    Font = Drawing.Fonts.Plex, -- Melhor fonte
-    TextSize = 16, -- Tamanho do texto
+local module = {
+    drawingcache = {},
+    cache = {},
+    settings = {
+        enabled = false,
+        refreshrate = 5,
+        limitdistance = false,
+        maxdistance = 2500,
+        -- As opções de time não são necessárias para NPCs
+        teamcheck = false,
+        teamcolor = false,
+        textoffset = 0,
+        textfont = 3,
+        textsize = 15,
+        names = false,
+        namescolor = Color3.new(1, 1, 1),
+        distance = false,
+        distancecolor = Color3.new(1, 1, 1),
+        boxes = false,
+        boxesfill = false,
+        boxesfillcolor = Color3.new(1, 1, 1),
+        boxesfilltrans = 0.5,
+        boxescolor = Color3.new(1, 1, 1),
+        tracers = false,
+        tracerscolor = Color3.new(1, 1, 1),
+        tracersorigin = "Bottom",
+        healthbars = false,
+        healthbarsoffset = 2,
+        healthbarscolor = Color3.new(0, 1, 0),
+        outlines = false
+    }
 }
 
-local function createText()
-    local text = Drawing.new("Text")
-    text.Color = Color3.fromRGB(255, 255, 255)
-    text.Size = ESP.TextSize
-    text.Font = ESP.Font
-    text.Center = true
-    text.Outline = ESP.OutlineEnabled
-    text.OutlineColor = ESP.OutlineColor
-    text.Visible = false
-    return text
-end
+-- Bibliotecas
+local Math = loadstring(game:HttpGet("https://raw.githubusercontent.com/iRay888/Ray/main/Math"))()
 
-local function createBox()
-    local box = Drawing.new("Square")
-    box.Thickness = ESP.BoxThickness
-    box.Filled = false
-    box.Color = ESP.BoxColor
-    box.Visible = false
-    return box
-end
+-- Serviços
+local RunService = game:GetService("RunService")
+local CurrentCamera = workspace.CurrentCamera
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer and LocalPlayer:GetMouse()
 
-local function createHealthBar()
-    local healthBar = Drawing.new("Square")
-    healthBar.Thickness = 1
-    healthBar.Filled = true
-    healthBar.Color = ESP.HealthBarColor
-    healthBar.Visible = false
-    return healthBar
-end
-
-local current_camera = game:GetService("Workspace").CurrentCamera
-local run_service = game:GetService("RunService")
-local players = game:GetService("Players")
-local workspace = game:GetService("Workspace")
-
-local function IsNPC(entity)
-    return entity:IsA("Model") and entity:FindFirstChildOfClass("Humanoid") 
-        and entity:FindFirstChild("HumanoidRootPart") 
-        and not players:GetPlayerFromCharacter(entity)
-end
-
-local function calculate_box(entity)
-    local character = entity
-    if not character then return end
-
-    local humanoid_root_part = character:FindFirstChild("HumanoidRootPart")
-    if not humanoid_root_part then return end
-
-    -- Captura as bordas do NPC
-    local model_cframe, model_size = character:GetBoundingBox()
-
-    -- Define os pontos da caixa 3D do NPC
-    local corners = {
-        model_cframe * Vector3.new(-model_size.X / 2, model_size.Y / 2, 0),
-        model_cframe * Vector3.new(model_size.X / 2, model_size.Y / 2, 0),
-        model_cframe * Vector3.new(-model_size.X / 2, -model_size.Y / 2, 0),
-        model_cframe * Vector3.new(model_size.X / 2, -model_size.Y / 2, 0)
-    }
-
-    -- Converte para coordenadas de tela
-    local minX, minY, maxX, maxY = math.huge, math.huge, -math.huge, -math.huge
-    for _, corner in pairs(corners) do
-        local screen_pos, on_screen = current_camera:WorldToViewportPoint(corner)
-        if on_screen then
-            minX, minY = math.min(minX, screen_pos.X), math.min(minY, screen_pos.Y)
-            maxX, maxY = math.max(maxX, screen_pos.X), math.max(maxY, screen_pos.Y)
-        end
+-- Função para criar objetos de desenho
+function module:Create(Class, Properties)
+    local Object = Drawing.new(Class)
+    for i, v in pairs(Properties) do
+        Object[i] = v
     end
-
-    if minX == math.huge then return end -- Se não estiver na tela, ignora
-
-    -- Ajuste do tamanho
-    local box_width = maxX - minX
-    local box_height = maxY - minY
-
-    return { X = minX, Y = minY, W = box_width, H = box_height }
+    table.insert(self.drawingcache, Object)
+    return Object
 end
 
-local esp_objects = {}
+-- Para NPCs não usamos cores de time; retorna a cor original
+function module:ParseColor(Color, Entity)
+    return Color
+end
 
-local function AddNPCEsp(entity)
-    if IsNPC(entity) and not esp_objects[entity] then
-        local box = calculate_box(entity)
-        if box then
-            esp_objects[entity] = {
-                BoxOutline = createBox(),
-                Box = createBox(),
-                Name = createText(),
-                Distance = createText(),
-                HealthBar = createHealthBar()
-            }
+-- Adiciona ESP para um NPC
+function module:AddEsp(NPC)
+    local Retainer = {}
 
-            -- Contorno preto para a caixa do ESP
-            if ESP.OutlineEnabled then
-                esp_objects[entity].BoxOutline.Thickness = ESP.BoxThickness + 2
-                esp_objects[entity].BoxOutline.Color = ESP.OutlineColor
-                esp_objects[entity].BoxOutline.Visible = true
-            end
+    Retainer.nameobject = self:Create("Text", {
+        Visible = false,
+        Text = NPC.Name,
+        Color = Color3.new(1, 1, 1),
+        Size = 13,
+        Center = true,
+        Outline = true,
+        OutlineColor = Color3.new(0, 0, 0),
+        Font = Drawing.Fonts.Plex
+    })
+
+    Retainer.distanceobject = self:Create("Text", {
+        Visible = false,
+        Color = Color3.new(1, 1, 1),
+        Size = 13,
+        Center = true,
+        Outline = true,
+        OutlineColor = Color3.new(0, 0, 0),
+        Font = Drawing.Fonts.Plex
+    })
+
+    Retainer.boxfillobject = self:Create("Square", {
+        Visible = false,
+        Transparency = 0.5,
+        Color = Color3.new(1, 1, 1),
+        Thickness = 1,
+        Filled = true,
+    })
+
+    Retainer.boxoutlineobject = self:Create("Square", {
+        Visible = false,
+        Transparency = 1,
+        Color = Color3.new(),
+        Thickness = 3,
+        Filled = false,
+    })
+
+    Retainer.boxobject = self:Create("Square", {
+        Visible = false,
+        Transparency = 1,
+        Color = Color3.new(1, 1, 1),
+        Thickness = 1,
+        Filled = false,
+    })
+
+    Retainer.healthbaroutlineobject = self:Create("Square", {
+        Visible = false,
+        Transparency = 1,
+        Color = Color3.new(),
+        Thickness = 3,
+        Filled = false,
+    })
+
+    Retainer.healthbarobject = self:Create("Square", {
+        Visible = false,
+        Transparency = 1,
+        Color = Color3.new(1, 1, 1),
+        Thickness = 1,
+        Filled = false,
+    })
+
+    Retainer.tracerobject = self:Create("Line", {
+        Thickness = 1
+    })
+
+    local CanRun = true
+
+    RunService:BindToRenderStep(NPC.Name .. "Esp", 1, function()
+        if (not CanRun) then
+            return
         end
-    end
-end
 
-local function UpdateESP()
-    for entity, objects in pairs(esp_objects) do
-        if not entity or not entity.Parent then
-            for _, obj in pairs(objects) do
-                obj.Visible = false
+        CanRun = false
+
+        local Character, Root = self:GetCharacter(NPC)
+
+        if (Character and Root) then
+            local Health, MaxHealth = self:GetHealth(NPC)
+            local _, OnScreen = CurrentCamera:WorldToViewportPoint(Root.Position)
+            local Magnitude = (Root.Position - CurrentCamera.CFrame.p).Magnitude
+            local CanShow = OnScreen and self.settings.enabled
+
+            if (self.settings.limitdistance and Magnitude > self.settings.maxdistance) then
+                CanShow = false
             end
-            esp_objects[entity] = nil
-        else
-            local box = calculate_box(entity)
-            if box then
-                -- Atualiza Caixa do ESP
-                objects.Box.Position = Vector2.new(box.X, box.Y)
-                objects.Box.Size = Vector2.new(box.W, box.H)
-                objects.Box.Color = ESP.BoxColor
-                objects.Box.Thickness = 2
-                objects.Box.Visible = ESP.BoxEnabled
 
-                -- Atualiza Nome do NPC
-                objects.Name.Text = entity.Name
-                objects.Name.Position = Vector2.new(box.X + (box.W / 2), box.Y - 18)
-                objects.Name.Visible = ESP.NameEnabled
+            if (Health <= 0) then
+                CanShow = false
+            end
 
-                -- Atualiza Distância
-                local distance = (entity.HumanoidRootPart.Position - players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                objects.Distance.Text = string.format("[%.1fm]", distance)
-                objects.Distance.Position = Vector2.new(box.X + (box.W / 2), box.Y + box.H + 5)
-                objects.Distance.Visible = ESP.DistanceEnabled
+            if (CanShow) then
+                local Data = self:GetBoundingBox(Character)
+                local Width = math.floor(Data.Positions.TopLeft.X - Data.Positions.TopRight.X)
+                local Height = math.floor(Data.Positions.TopLeft.Y - Data.Positions.BottomLeft.Y)
+                local BoxSize = Vector2.new(Width, Height)
+                local BoxPosition = Vector2.new(math.floor(Data.Positions.BottomRight.X), math.floor(Data.Positions.BottomRight.Y))
+                local HealthbarSize = Vector2.new(2, math.floor(BoxSize.Y * (Health / MaxHealth)))
+                local HealthbarPosition = Vector2.new(math.floor(Data.Positions.TopLeft.X - (4 + self.settings.healthbarsoffset)), math.floor(Data.Positions.BottomLeft.Y))
+                local ViewportSize = CurrentCamera.ViewportSize
 
-                -- Atualiza Barra de Vida
-                local humanoid = entity:FindFirstChildOfClass("Humanoid")
-                if humanoid then
-                    local health_percent = math.clamp(humanoid.Health / humanoid.MaxHealth, 0, 1)
+                Retainer.nameobject.Visible = self.settings.names
+                Retainer.nameobject.Outline = self.settings.outlines
+                Retainer.nameobject.Size = self.settings.textsize
+                Retainer.nameobject.Font = self.settings.textfont
+                Retainer.nameobject.Color = self:ParseColor(self.settings.namescolor, NPC)
+                Retainer.nameobject.Position = Vector2.new(Data.Positions.Middle.X, (Data.Positions.TopLeft.Y - 15) + self.settings.textoffset)
 
-                    objects.HealthBar.Size = Vector2.new(4, box.H * health_percent)
-                    objects.HealthBar.Position = Vector2.new(box.X - 7, box.Y + (box.H * (1 - health_percent)))
-                    objects.HealthBar.Color = ESP.HealthBarColor
-                    objects.HealthBar.Visible = ESP.HealthBarEnabled
+                Retainer.distanceobject.Visible = self.settings.distance
+                Retainer.distanceobject.Outline = self.settings.outlines
+                Retainer.distanceobject.Text = math.floor(Magnitude) .. " Studs"
+                Retainer.distanceobject.Size = self.settings.textsize
+                Retainer.distanceobject.Font = self.settings.textfont
+                Retainer.distanceobject.Color = self:ParseColor(self.settings.distancecolor, NPC)
+                Retainer.distanceobject.Position = Vector2.new(Data.Positions.Middle.X, (Data.Positions.BottomLeft.Y + 3) + self.settings.textoffset)
+
+                Retainer.boxobject.Visible = self.settings.boxes
+                Retainer.boxobject.Color = self:ParseColor(self.settings.boxescolor, NPC)
+                Retainer.boxoutlineobject.Visible = self.settings.boxes and self.settings.outlines
+                Retainer.boxfillobject.Color = self:ParseColor(self.settings.boxesfillcolor, NPC)
+                Retainer.boxfillobject.Transparency = self.settings.boxesfilltrans
+                Retainer.boxfillobject.Visible = self.settings.boxes and self.settings.boxesfill
+
+                Retainer.boxobject.Size = BoxSize
+                Retainer.boxobject.Position = BoxPosition
+
+                Retainer.boxoutlineobject.Size = BoxSize
+                Retainer.boxoutlineobject.Position = BoxPosition
+
+                Retainer.boxfillobject.Size = BoxSize
+                Retainer.boxfillobject.Position = BoxPosition
+
+                Retainer.healthbarobject.Visible = self.settings.healthbars
+                Retainer.healthbarobject.Color = self:ParseColor(self.settings.healthbarscolor, NPC)
+                Retainer.healthbaroutlineobject.Visible = self.settings.healthbars and self.settings.outlines
+
+                Retainer.healthbarobject.Size = HealthbarSize
+                Retainer.healthbarobject.Position = HealthbarPosition
+
+                Retainer.healthbaroutlineobject.Size = Vector2.new(HealthbarSize.X, BoxSize.Y)
+                Retainer.healthbaroutlineobject.Position = HealthbarPosition
+
+                Retainer.tracerobject.Visible = self.settings.tracers
+                Retainer.tracerobject.Color = self:ParseColor(self.settings.tracerscolor, NPC)
+                Retainer.tracerobject.To = Data.Positions.Middle
+
+                local Origin, Target = self.settings.tracersorigin, Vector2.new(ViewportSize.X / 2, ViewportSize.Y / 2)
+
+                if (Origin == "Top") then
+                    Target = Vector2.new(Target.X, 0)
+                elseif (Origin == "Bottom") then
+                    Target = Vector2.new(Target.X, ViewportSize.Y)
+                elseif (Origin == "Left") then
+                    Target = Vector2.new(0, Target.Y)
+                elseif (Origin == "Right") then
+                    Target = Vector2.new(ViewportSize.X, Target.Y)
+                elseif (Origin == "Mouse") then
+                    Target = Vector2.new(Mouse.X, Mouse.Y + 36)
                 end
+
+                Retainer.tracerobject.From = Target
             else
-                -- Se o NPC estiver fora da tela, esconde o ESP
-                for _, obj in pairs(objects) do
-                    obj.Visible = false
+                for i, v in pairs(Retainer) do
+                    v.Visible = false
                 end
             end
+        else
+            for i, v in pairs(Retainer) do
+                v.Visible = false
+            end
+        end
+
+        task.wait(math.clamp(self.settings.refreshrate / 1000, 0, 9e9))
+        CanRun = true
+    end)
+
+    self.cache[NPC] = Retainer
+end
+
+-- Remove o ESP do NPC
+function module:RemoveEsp(NPC)
+    local Data = self.cache[NPC]
+    if (Data) then
+        RunService:UnbindFromRenderStep(NPC.Name .. "Esp")
+        for _, Object in pairs(Data) do
+            Object:Remove()
         end
     end
 end
 
--- Garante que todos os NPCs existentes sejam registrados
-for _, entity in pairs(workspace:GetDescendants()) do
-    if IsNPC(entity) then
-        AddNPCEsp(entity)
+-- Obtém o "personagem" (modelo) do NPC e seu HumanoidRootPart
+function module:GetCharacter(NPC)
+    return NPC, NPC:FindFirstChild("HumanoidRootPart")
+end
+
+-- Calcula a bounding box do NPC com base em seus BaseParts
+function module:GetBoundingBox(Character)
+    local Data = {}
+
+    for i, v in pairs(Character:GetChildren()) do
+        if (v:IsA("BasePart") and v.Name ~= "HumanoidRootPart") then
+            for i2, v2 in pairs(Math.getpartinfo2(v.CFrame, v.Size)) do
+                table.insert(Data, v2)
+            end
+        end
+    end
+
+    return Math.getposlist2(Data)
+end
+
+-- Obtém a saúde do NPC
+function module:GetHealth(NPC)
+    local Humanoid = NPC and NPC:FindFirstChild("Humanoid")
+    return Humanoid and Humanoid.Health, Humanoid and Humanoid.MaxHealth
+end
+
+-- Funções de time não são necessárias para NPCs; funções adaptadas
+function module:GetTeam(NPC)
+    return nil
+end
+
+function module:GetTeamColor(NPC)
+    return Color3.new(1, 1, 1)
+end
+
+function module:CheckTeam(NPC)
+    return true
+end
+
+-- Inicializa o ESP para todos os NPCs na pasta "NPCs"
+function module:Init()
+    local NPCFolder = workspace:FindFirstChild("NPCs")
+    if NPCFolder then
+        for _, NPC in pairs(NPCFolder:GetChildren()) do
+            self:AddEsp(NPC)
+        end
+
+        NPCFolder.ChildAdded:Connect(function(NPC)
+            self:AddEsp(NPC)
+        end)
+
+        NPCFolder.ChildRemoved:Connect(function(NPC)
+            self:RemoveEsp(NPC)
+        end)
+    else
+        warn("Pasta 'NPCs' não encontrada no workspace.")
     end
 end
 
-workspace.DescendantAdded:Connect(function(obj)
-    task.wait(0.1)
-    if IsNPC(obj) then
-        AddNPCEsp(obj)
-    end
-end)
-
-run_service.RenderStepped:Connect(UpdateESP)
-
-return ESP
+return module
