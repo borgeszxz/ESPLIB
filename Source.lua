@@ -1,6 +1,6 @@
 --[[ 
-    https://github.com/VoidMasterX | siper#9938. 
-    Slightly modified settings table for NPC-only ESP
+    ESP Library Modificada - Apenas NPCs
+    Baseado na biblioteca original de VoidMasterX | siper#9938.
 ]]--
 
 local module = {
@@ -49,7 +49,7 @@ function module:Create(Class, Properties)
     return Object
 end
 
--- Alterado: Filtra apenas NPCs
+-- Alterado: Apenas NPCs são adicionados ao ESP
 function module:AddEsp(NPC)
     if not NPC:IsA("Model") or not NPC:FindFirstChild("Humanoid") or Players:GetPlayerFromCharacter(NPC) then
         return
@@ -63,7 +63,7 @@ function module:AddEsp(NPC)
     Retainer.nameobject = self:Create("Text", {
         Visible = false,
         Text = NPC.Name,
-        Color = Color3.new(1, 1, 1),
+        Color = self.settings.namescolor,
         Size = self.settings.textsize,
         Center = true,
         Outline = true,
@@ -94,7 +94,7 @@ function module:AddEsp(NPC)
         Transparency = 1,
         Color = self.settings.healthbarscolor,
         Thickness = 1,
-        Filled = false
+        Filled = true
     })
     
     local CanRun = true
@@ -128,15 +128,13 @@ function module:AddEsp(NPC)
             Retainer.boxobject.Visible = self.settings.boxes
             Retainer.healthbarobject.Visible = self.settings.healthbars
             
-            -- Atualizando posição das caixas
-            local BoxSize = Vector2.new(50, 100)
-            local BoxPosition = Vector2.new(CurrentCamera:WorldToViewportPoint(Root.Position).X - 25, CurrentCamera:WorldToViewportPoint(Root.Position).Y - 50)
+            -- Atualizando posição das caixas corretamente
+            local Data = module:GetBoundingBox(NPC)
+            Retainer.boxobject.Size = Data.Size
+            Retainer.boxobject.Position = Data.Position
             
-            Retainer.boxobject.Size = BoxSize
-            Retainer.boxobject.Position = BoxPosition
-            
-            local HealthbarSize = Vector2.new(3, BoxSize.Y * (Health / MaxHealth))
-            local HealthbarPosition = Vector2.new(BoxPosition.X - 5, BoxPosition.Y)
+            local HealthbarSize = Vector2.new(3, Data.Size.Y * (Health / MaxHealth))
+            local HealthbarPosition = Vector2.new(Data.Position.X - 5, Data.Position.Y)
             
             Retainer.healthbarobject.Size = HealthbarSize
             Retainer.healthbarobject.Position = HealthbarPosition
@@ -149,6 +147,19 @@ function module:AddEsp(NPC)
     end)
 
     self.cache[NPC] = Retainer
+end
+
+-- Função para obter Bounding Box corretamente
+function module:GetBoundingBox(Character)
+    local Data = {}
+    for _, v in pairs(Character:GetChildren()) do
+        if v:IsA("BasePart") and v.Name ~= "HumanoidRootPart" then
+            for _, v2 in pairs(Math.getpartinfo2(v.CFrame, v.Size)) do
+                table.insert(Data, v2)
+            end
+        end
+    end
+    return Math.getposlist2(Data)
 end
 
 -- Alterado: Apenas NPCs são adicionados ao ESP
