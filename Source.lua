@@ -304,17 +304,40 @@ function module:CheckTeam(Player)
 end
 
 function module:Init()
-    for i,v in pairs(Players:GetPlayers()) do
-        self:AddEsp(v)
+    -- Adiciona ESP para jogadores
+    for _, player in pairs(Players:GetPlayers()) do
+        self:AddEsp(player)
     end
 
-    Players.PlayerAdded:Connect(function(Player)
-        self:AddEsp(Player)
+    -- Detecta novos jogadores entrando
+    Players.PlayerAdded:Connect(function(player)
+        self:AddEsp(player)
     end)
 
-    Players.PlayerRemoving:Connect(function(Player)
-        self:AddEsp(Player)
+    Players.PlayerRemoving:Connect(function(player)
+        self:RemoveEsp(player)
+    end)
+
+    -- **ADICIONA SUPORTE PARA NPCs**
+    for _, npc in pairs(workspace:GetChildren()) do
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+            self:AddEsp(npc)
+        end
+    end
+
+    -- Detecta novos NPCs adicionados ao workspace
+    workspace.ChildAdded:Connect(function(npc)
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+            self:AddEsp(npc)
+        end
+    end)
+
+    workspace.ChildRemoved:Connect(function(npc)
+        if npc:IsA("Model") and npc:FindFirstChild("Humanoid") and npc:FindFirstChild("HumanoidRootPart") then
+            self:RemoveEsp(npc)
+        end
     end)
 end
+
 
 return module
