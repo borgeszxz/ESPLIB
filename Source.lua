@@ -33,13 +33,16 @@ local module = {
     }
 }
 
+-- Libraries
+local Math = loadstring(game:HttpGet("https://raw.githubusercontent.com/iRay888/Ray/main/Math"))()
+
 -- Services
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 local CurrentCamera = workspace.CurrentCamera
 local LocalPlayer = Players.LocalPlayer
 
--- Functions
+-- Função para criar elementos visuais
 function module:Create(Class, Properties)
     local Object = Drawing.new(Class)
     for i, v in pairs(Properties) do
@@ -50,19 +53,19 @@ function module:Create(Class, Properties)
 end
 
 -- Alterado: Apenas NPCs são adicionados ao ESP
-function module:AddEsp(NPC)
-    if not NPC:IsA("Model") or not NPC:FindFirstChild("Humanoid") or Players:GetPlayerFromCharacter(NPC) then
+function module:AddEsp(Entity)
+    if not Entity:IsA("Model") or not Entity:FindFirstChild("Humanoid") or Players:GetPlayerFromCharacter(Entity) then
         return
     end
 
-    local Root = NPC:FindFirstChild("HumanoidRootPart") or NPC:FindFirstChild("Head") or NPC.PrimaryPart
+    local Root = Entity:FindFirstChild("HumanoidRootPart") or Entity:FindFirstChild("Head") or Entity.PrimaryPart
     if not Root then return end
 
     local Retainer = {}
     
     Retainer.nameobject = self:Create("Text", {
         Visible = false,
-        Text = NPC.Name,
+        Text = Entity.Name,
         Color = self.settings.namescolor,
         Size = self.settings.textsize,
         Center = true,
@@ -94,20 +97,20 @@ function module:AddEsp(NPC)
         Transparency = 1,
         Color = self.settings.healthbarscolor,
         Thickness = 1,
-        Filled = true
+        Filled = false
     })
     
     local CanRun = true
-    RunService:BindToRenderStep(NPC.Name .. "Esp", 1, function()
+    RunService:BindToRenderStep(Entity.Name .. "Esp", 1, function()
         if not CanRun then return end
         CanRun = false
 
-        if NPC.Parent == nil or not NPC:FindFirstChild("Humanoid") then
+        if Entity.Parent == nil or not Entity:FindFirstChild("Humanoid") then
             for _, v in pairs(Retainer) do v.Visible = false end
             return
         end
 
-        local Health, MaxHealth = NPC:FindFirstChild("Humanoid").Health, NPC:FindFirstChild("Humanoid").MaxHealth
+        local Health, MaxHealth = Entity:FindFirstChild("Humanoid").Health, Entity:FindFirstChild("Humanoid").MaxHealth
         local _, OnScreen = CurrentCamera:WorldToViewportPoint(Root.Position)
         local Distance = (Root.Position - CurrentCamera.CFrame.p).Magnitude
         local CanShow = OnScreen and self.settings.enabled
@@ -122,14 +125,14 @@ function module:AddEsp(NPC)
         
         if CanShow then
             Retainer.nameobject.Visible = self.settings.names
-            Retainer.nameobject.Text = NPC.Name
+            Retainer.nameobject.Text = Entity.Name
             Retainer.distanceobject.Visible = self.settings.distance
             Retainer.distanceobject.Text = string.format("%.1fm", Distance)
             Retainer.boxobject.Visible = self.settings.boxes
             Retainer.healthbarobject.Visible = self.settings.healthbars
             
-            -- Atualizando posição das caixas corretamente
-            local Data = module:GetBoundingBox(NPC)
+            -- Mantendo as caixas e barras no formato correto
+            local Data = module:GetBoundingBox(Entity)
             Retainer.boxobject.Size = Data.Size
             Retainer.boxobject.Position = Data.Position
             
@@ -146,7 +149,7 @@ function module:AddEsp(NPC)
         CanRun = true
     end)
 
-    self.cache[NPC] = Retainer
+    self.cache[Entity] = Retainer
 end
 
 -- Função para obter Bounding Box corretamente
