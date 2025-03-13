@@ -1,6 +1,12 @@
+--[[
+    ESP Library Modificada - Apenas NPCs
+    Mantendo a estrutura original, apenas alterando para NPCs
+]]--
+
 local current_camera = game:GetService("Workspace").CurrentCamera
 local run_service = game:GetService("RunService")
 local players = game:GetService("Players")
+local workspace = game:GetService("Workspace")
 
 local ESP = {
     Enabled = true,
@@ -42,7 +48,7 @@ local esp_objects = {}
 
 local function AddNPCEsp()
     for _, entity in pairs(workspace:GetDescendants()) do
-        if IsNPC(entity) then
+        if IsNPC(entity) and not esp_objects[entity] then
             local box = calculate_box(entity)
             if box then
                 esp_objects[entity] = {
@@ -65,7 +71,7 @@ local function AddNPCEsp()
                 esp_objects[entity].Name.Center = true
                 esp_objects[entity].Name.Visible = ESP.NameEnabled
                 
-                local distance = (entity.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
+                local distance = (entity.HumanoidRootPart.Position - players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
                 esp_objects[entity].Distance.Text = string.format("[%.1fm]", distance)
                 esp_objects[entity].Distance.Position = Vector2.new(box.X + (box.W / 2), box.Y + box.H + 3)
                 esp_objects[entity].Distance.Color = Color3.fromRGB(255, 255, 255)
